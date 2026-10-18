@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Support console</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header>
+      <h1>Support console <span class="tag">internal</span></h1>
+      <label>
+        Player
+        <select id="player" data-testid="player-select">
+          <option value="p-1001">Aino (p-1001)</option>
+          <option value="p-1002">Bo (p-1002)</option>
+          <option value="p-1003">Cleo (p-1003)</option>
+        </select>
+      </label>
+      <a href="/">Back to the store</a>
+    </header>
+
+    <main class="support">
+      <section>
+        <h2>Orders the store has</h2>
+        <table data-testid="orders">
+          <thead>
+            <tr>
+              <th>Order</th><th>Game</th><th>Item</th><th>Charged</th>
+              <th>Status</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="orders"></tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>What each game says the player owns</h2>
+        <p class="hint">Returned by the game, untouched.</p>
+        <div id="inventories" data-testid="inventories"></div>
+      </section>
+    </main>
+
+    <script type="module" src="/support.js"></script>
+  </body>
+</html>

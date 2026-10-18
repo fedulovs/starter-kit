@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Player Store</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header>
+      <h1>Player Store</h1>
+      <label>
+        Signed in as
+        <select id="player" data-testid="player-select">
+          <option value="p-1001">Aino (p-1001)</option>
+          <option value="p-1002">Bo (p-1002)</option>
+          <option value="p-1003">Cleo (p-1003)</option>
+        </select>
+      </label>
+      <a href="/support.html">Support console</a>
+    </header>
+
+    <nav id="games" data-testid="game-tabs"></nav>
+
+    <main>
+      <section>
+        <h2>Offers</h2>
+        <ul id="offers" data-testid="offers"></ul>
+      </section>
+
+      <section>
+        <h2>Your orders</h2>
+        <ul id="orders" data-testid="orders"></ul>
+      </section>
+    </main>
+
+    <dialog id="checkout" data-testid="checkout">
+      <h3>Checkout</h3>
+      <p class="summary">
+        <span data-testid="checkout-item"></span>
+        <span class="price" data-testid="checkout-price"></span>
+      </p>
+
+      <label>Name on card
+        <input name="name" value="A. Player" data-testid="card-name" />
+      </label>
+      <label>Card number
+        <input name="number" value="4242 4242 4242 4242" data-testid="card-number" />
+      </label>
+      <div class="row">
+        <label>Expiry
+          <input name="expiry" value="12/30" data-testid="card-expiry" />
+        </label>
+        <label>CVC
+          <input name="cvc" value="123" data-testid="card-cvc" />
+        </label>
+      </div>
+
+      <p class="error" data-testid="checkout-error" hidden></p>
+
+      <menu>
+        <button type="button" data-testid="checkout-cancel">Cancel</button>
+        <button type="button" class="buy" data-testid="checkout-pay">Pay</button>
+      </menu>
+    </dialog>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

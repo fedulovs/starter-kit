@@ -1,0 +1,11 @@
+build/
+.gradle/
+node_modules/
+test-results/
+playwright-report/
+*.log
+player-store-starter-kit*.zip
+ASSIGNMENT.pdf
+.assignment.frag.html
+.assignment.src.md
+.DS_Store
