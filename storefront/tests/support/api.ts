@@ -70,6 +70,24 @@ export async function pollUntil<T>(
   return value;
 }
 
+/**
+ * Repeats a call while it answers 503. Iron Siege is documented to shed load,
+ * and a shed request says nothing about the rule a test is checking. It sheds
+ * before processing, so repeating is safe even for grants. Only 503 is
+ * retried: any other status is the game's real answer.
+ */
+export async function retryShedding<T>(
+  call: () => Promise<Reply<T>>,
+  attempts = 4
+): Promise<Reply<T>> {
+  let result = await call();
+  for (let attempt = 1; attempt < attempts && result.status === 503; attempt++) {
+    await sleep(200);
+    result = await call();
+  }
+  return result;
+}
+
 // --- Game integration API (direct) -------------------------------------------
 
 export const gameApi = {
@@ -117,6 +135,30 @@ export function countOwned(inventoryBody: any, itemId: string): number {
   return entries
     .filter((entry) => String(entry?.itemId ?? "").trim() === itemId.trim())
     .reduce((sum, entry) => sum + Number(entry?.quantity ?? entry?.count ?? 0), 0);
+}
+
+/**
+ * Ownership once the inventory has stopped changing. A queue-backed game can
+ * still be applying grants from an earlier test; counting from a moving
+ * baseline would credit those to the test that is measuring.
+ */
+export async function settledOwned(
+  request: APIRequestContext,
+  game: GameUnderTest,
+  playerId: string,
+  itemId: string,
+  { quietMs = 2_000, maxChecks = 4 } = {}
+): Promise<number> {
+  let previous = await ownedInGame(request, game, playerId, itemId);
+  for (let check = 0; check < maxChecks; check++) {
+    await sleep(quietMs);
+    const current = await ownedInGame(request, game, playerId, itemId);
+    if (current === previous) {
+      return current;
+    }
+    previous = current;
+  }
+  return previous;
 }
 
 export async function ownedInGame(
