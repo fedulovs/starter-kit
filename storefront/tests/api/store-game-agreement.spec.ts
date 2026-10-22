@@ -1,4 +1,6 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { GAMES, game as gameById, type GameUnderTest } from "../support/games.js";
 import {
   TRANSIENT_FAILURES,
@@ -89,6 +91,23 @@ const summary = (orders: PlacedOrder[]) =>
     .map(([key, n]) => `${n} × ${key}`)
     .join(", ");
 
+/**
+ * A batch placed once per run and read by several tests. Playwright replaces
+ * the worker after a failed test and runs beforeAll again, so the batch is
+ * kept on disk, in the output directory Playwright empties at the start of
+ * every run, rather than in memory.
+ */
+async function sharedBatch(file: string, place: () => Promise<PlacedOrder[]>): Promise<PlacedOrder[]> {
+  try {
+    return JSON.parse(await readFile(file, "utf8"));
+  } catch {
+    const placed = await place();
+    await mkdir(dirname(file), { recursive: true });
+    await writeFile(file, JSON.stringify(placed));
+    return placed;
+  }
+}
+
 /** Offers the platform lists, retried while a flaky game makes the list come back empty. */
 async function platformOffers(request: APIRequestContext, gameId: string, playerId: string): Promise<any[]> {
   for (let attempt = 0; attempt < 6; attempt++) {
@@ -104,6 +123,8 @@ async function platformOffers(request: APIRequestContext, gameId: string, player
  * I1 needs an order that can be recorded as delivered without the item
  * arriving. Tide Farm's limited-run Golden Tractor (stock of two, the case
  * the handover notes single out) is that case; elsewhere the sample item.
+ * Three orders against a stock of two means at least one hits the sold-out
+ * path, whether or not C6 has already used up the stock in this run.
  */
 const I1_SCENARIO: Record<string, { playerId: string; offerId: string; itemId: string; orders: number }> = {
   "tide-farm": { playerId: "p-1003", offerId: "golden_tractor", itemId: "GOLDEN_TRACTOR", orders: 3 },
@@ -128,11 +149,16 @@ for (const game of GAMES) {
       let batch: PlacedOrder[] = [];
       const size = game.gameId === "iron-siege" ? 60 : 5;
 
-      test.beforeAll(async ({ playwright }) => {
+      test.beforeAll(async ({ playwright }, testInfo) => {
         test.setTimeout(300_000);
-        const request = await playwright.request.newContext();
-        batch = await placeAndAttribute(request, game, { playerId: game.players[1], offerId, itemId }, size);
-        await request.dispose();
+        batch = await sharedBatch(join(testInfo.project.outputDir, `batch-${game.gameId}.json`), async () => {
+          const request = await playwright.request.newContext();
+          try {
+            return await placeAndAttribute(request, game, { playerId: game.players[1], offerId, itemId }, size);
+          } finally {
+            await request.dispose();
+          }
+        });
       });
 
       // I2: if the platform says the order failed, the player did not get the item.
@@ -157,21 +183,20 @@ for (const game of GAMES) {
     // Platform API: "Repeating a request with the same key returns the original
     // order rather than creating a second one."
     test(title(game.gameId, "I4", "repeating an order's idempotency key gives one order and one item"), async ({ request }) => {
-      const idempotencyKey = uniqueKey("i4");
+      const place = (idempotencyKey: string) =>
+        platformApi.order(request, { gameId: game.gameId, playerId: buyer, offerId, idempotencyKey, preview: preview(game) });
       const before = await settledOwned(request, game, buyer, itemId);
 
-      const first = await orderUntil(
-        request,
-        { gameId: game.gameId, playerId: buyer, offerId, idempotencyKey, preview: preview(game) },
-        (order) => Boolean(order?.orderId)
-      );
-      const second = await platformApi.order(request, {
-        gameId: game.gameId,
-        playerId: buyer,
-        offerId,
-        idempotencyKey,
-        preview: preview(game),
-      });
+      // Setup: a fresh key per attempt until one creates an order, so the key
+      // under test has been sent exactly once before the repeat.
+      let idempotencyKey = "";
+      let first: any;
+      for (let attempt = 0; attempt < 10 && !first?.orderId; attempt++) {
+        idempotencyKey = uniqueKey("i4");
+        first = (await place(idempotencyKey)).body;
+      }
+      expect(first?.orderId, `setup: no order created, last ${describe(first)}`).toBeTruthy();
+      const second = await place(idempotencyKey);
       await sleep(LATE_GRANT_WAIT_MS);
       const after = await ownedInGame(request, game, buyer, itemId);
 
@@ -229,22 +254,14 @@ for (const game of GAMES) {
 
       for (const playerId of game.players) {
         for (const offer of await platformOffers(request, game.gameId, playerId)) {
-          let res = await platformApi.order(request, {
-            gameId: game.gameId,
-            playerId,
-            offerId: offer.offerId,
-            preview: preview(game),
-          });
+          const place = () =>
+            platformApi.order(request, { gameId: game.gameId, playerId, offerId: offer.offerId, preview: preview(game) });
+          let res = await place();
           for (let retry = 0; retry < 4; retry++) {
             const transient =
               TRANSIENT_FAILURES.includes(res.body?.failureReason) || res.body?.error === "offer_not_found";
             if (!transient) break;
-            res = await platformApi.order(request, {
-              gameId: game.gameId,
-              playerId,
-              offerId: offer.offerId,
-              preview: preview(game),
-            });
+            res = await place();
           }
           if (res.body?.status !== "delivered" && res.body?.status !== "pending") {
             refused.push(`${playerId} ${offer.offerId} → ${res.body?.status ?? res.status} (${res.body?.failureReason ?? res.body?.error})`);

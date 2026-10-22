@@ -227,17 +227,18 @@ export const TRANSIENT_FAILURES = ["service_unavailable", "delivery_transport_er
 /**
  * Places orders until one comes back the way a test's setup needs it (e.g. a
  * delivered order to refund). Setup only: the behaviour under test must not
- * be retried away. Each attempt is a new order with its own key.
+ * be retried away. Each attempt is a new order with its own key, so a test
+ * that checks key replay must make its own repeat calls.
  */
 export async function orderUntil(
   request: APIRequestContext,
-  input: { gameId: string; playerId: string; offerId: string; idempotencyKey?: string; preview?: boolean },
+  input: { gameId: string; playerId: string; offerId: string; preview?: boolean },
   wanted: (order: any) => boolean,
   attempts = 10
 ): Promise<any> {
   let last: Reply | undefined;
   for (let attempt = 0; attempt < attempts; attempt++) {
-    last = await platformApi.order(request, input);
+    last = await platformApi.order(request, { ...input, idempotencyKey: uniqueKey("setup") });
     if (wanted(last.body)) {
       return last.body;
     }

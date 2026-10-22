@@ -1,5 +1,5 @@
-import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
-import { countOwned, platformApi, uniqueKey } from "../support/api.js";
+import { expect, test, type Page } from "@playwright/test";
+import { countOwned, orderUntil } from "../support/api.js";
 import { game } from "../support/games.js";
 import { title } from "../support/tags.js";
 
@@ -16,27 +16,16 @@ import { title } from "../support/tags.js";
 
 const PLAYER = "p-1002";
 
-/** A delivered order to refund. Setup, not under test, so Iron's random 503s are retried. */
-async function deliveredOrder(request: APIRequestContext, gameId: string, offerId: string) {
-  for (let attempt = 0; attempt < 10; attempt++) {
-    const { body } = await platformApi.order(request, {
-      gameId,
-      playerId: PLAYER,
-      offerId,
-      idempotencyKey: uniqueKey("u6"),
-    });
-    if (body?.status === "delivered") {
-      return body;
-    }
-  }
-  throw new Error(`could not get a delivered ${gameId} order to refund`);
-}
-
-/** How many of `itemId` the console's inventory panel for `gameId` shows. */
+/**
+ * How many of `itemId` the console's inventory panel for `gameId` shows for
+ * PLAYER, or -1 while it shows something else. The page loads the default
+ * player on open, and that load can finish after the switch to PLAYER.
+ */
 async function shownInConsole(page: Page, gameId: string, itemId: string): Promise<number> {
   const text = await page.getByTestId(`inventory-${gameId}`).locator("pre").textContent();
   try {
-    return countOwned(JSON.parse(text ?? "null"), itemId);
+    const inventory = JSON.parse(text ?? "null");
+    return inventory?.playerId === PLAYER ? countOwned(inventory, itemId) : -1;
   } catch {
     return -1;
   }
@@ -46,15 +35,20 @@ for (const gameId of ["nova-arena", "iron-siege"]) {
   const { sample } = game(gameId);
 
   test(title(gameId, "U6", "refunding from the support console removes the item from the game"), async ({ page, request }) => {
-    const order = await deliveredOrder(request, gameId, sample.offerId);
+    // Setup, not under test, so Iron Siege's random failures are retried.
+    const order = await orderUntil(
+      request,
+      { gameId, playerId: PLAYER, offerId: sample.offerId },
+      (o) => o?.status === "delivered"
+    );
 
     await page.goto("/support.html");
     await page.getByTestId("player-select").selectOption(PLAYER);
     const row = page.getByTestId(`order-${order.orderId}`);
     await expect(row).toBeVisible();
 
-    await expect.poll(() => shownInConsole(page, gameId, sample.itemId)).toBeGreaterThan(0);
-    const before = await shownInConsole(page, gameId, sample.itemId);
+    let before = -1;
+    await expect.poll(async () => (before = await shownInConsole(page, gameId, sample.itemId))).toBeGreaterThan(0);
 
     await row.getByTestId("refund").click();
 

@@ -14,7 +14,7 @@
     "test:contract": "playwright test --project=api --grep @contract",
     "test:invariant": "playwright test --project=api --grep @invariant",
     "report": "node scripts/results-table.mjs",
-    "test:report": "playwright test; node scripts/results-table.mjs",
+    "test:report": "node scripts/test-report.mjs",
     "typecheck": "tsc --noEmit"
   },
   "engines": {

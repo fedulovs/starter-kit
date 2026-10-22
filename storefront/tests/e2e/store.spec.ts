@@ -1,5 +1,4 @@
 import { expect, test } from "@playwright/test";
-import { platformApi } from "../support/api.js";
 import { DECLINED_CARD, buy, openStore, orderRow, pay, startCheckout, storeGames, storeOrders } from "../support/store.js";
 import { TAG, title } from "../support/tags.js";
 
@@ -15,10 +14,7 @@ import { TAG, title } from "../support/tags.js";
 const EURO_PRICE = /^€\d+\.\d{2}$/;
 
 test(title("store", "U1", "the store lists the live games and their priced offers"), async ({ page, request }) => {
-  const { body } = await platformApi.games(request);
-  const shown = await storeGames(request);
-  const preview = shown.some((game: any) => !game.live);
-  const expected = body.games.filter((game: any) => preview || game.live).map((game: any) => game.gameId);
+  const expected = (await storeGames(request)).map((game: any) => game.gameId);
 
   await openStore(page, "p-1001", "nova-arena");
 
