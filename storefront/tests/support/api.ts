@@ -220,3 +220,29 @@ export const platformApi = {
       `${PLATFORM_URL}/v1/games/${gameId}/players/${encodeURIComponent(playerId)}/inventory`
     ),
 };
+
+/** Failures caused by Iron Siege shedding load or being slow, not by the order itself. */
+export const TRANSIENT_FAILURES = ["service_unavailable", "delivery_transport_error"];
+
+/**
+ * Places orders until one comes back the way a test's setup needs it (e.g. a
+ * delivered order to refund). Setup only: the behaviour under test must not
+ * be retried away. Each attempt is a new order with its own key.
+ */
+export async function orderUntil(
+  request: APIRequestContext,
+  input: { gameId: string; playerId: string; offerId: string; idempotencyKey?: string; preview?: boolean },
+  wanted: (order: any) => boolean,
+  attempts = 10
+): Promise<any> {
+  let last: Reply | undefined;
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    last = await platformApi.order(request, input);
+    if (wanted(last.body)) {
+      return last.body;
+    }
+  }
+  throw new Error(
+    `setup: no suitable ${input.gameId} order after ${attempts} attempts, last ${last?.status} ${JSON.stringify(last?.body)}`
+  );
+}
