@@ -9,8 +9,6 @@
 export const TAG = {
   /** A rule stated in docs/game-integration-api.md, checked against a game directly. */
   contract: "@contract",
-  /** The platform's records agree with what the game actually did. */
-  invariant: "@invariant",
   /** Needs the storefront started with PREVIEW_GAMES=true. */
   preview: "@preview",
 } as const;
