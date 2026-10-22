@@ -16,16 +16,18 @@ import { dirname } from "node:path";
 
 const [reportPath = "test-results/results.json", outPath = "test-results/results.md"] = process.argv.slice(2);
 
-const GAME_ORDER = ["nova-arena", "tide-farm", "iron-siege", "drift-club", "store"];
+const GAME_ORDER = ["nova-arena", "tide-farm", "iron-siege", "drift-club", "platform", "store"];
 const GAME_NAMES = {
   "nova-arena": "Nova Arena",
   "tide-farm": "Tide Farm",
   "iron-siege": "Iron Siege",
   "drift-club": "Drift Club",
+  platform: "Platform",
   store: "Store",
 };
 const GROUPS = [
   { prefix: "C", heading: "Game contract (docs/game-integration-api.md, each game called directly)" },
+  { prefix: "I", heading: "Store ↔ game agreement (ordered through the platform, checked in the game)" },
   { prefix: "U", heading: "UI smoke (storefront in a real browser)" },
 ];
 const MARK = { passed: "✔", failed: "✘", timedOut: "✘", interrupted: "✘", skipped: "–" };
@@ -100,8 +102,9 @@ const truncate = (text, max = 220) => (text.length > max ? `${text.slice(0, max 
 // running) must not render as a clean bill of health.
 if (!results.some((r) => r.status !== "skipped")) {
   console.error(
-    `No checks ran in ${reportPath} (${results.length} skipped). ` +
-      "The stack was probably not running; start it with ./start.sh and run the tests again."
+    `No checks ran in ${reportPath} (${results.length} skipped). The report only covers the last ` +
+      "Playwright run: either the stack was not running (start it with ./start.sh), or the last run " +
+      "only listed or skipped tests. Run npm run test:report to rebuild it."
   );
   process.exit(1);
 }
