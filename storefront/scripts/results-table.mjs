@@ -1,0 +1,187 @@
+#!/usr/bin/env node
+/**
+ * Turns Playwright's JSON report into a game × rule results table.
+ *
+ *   node scripts/results-table.mjs [report.json] [out.md]
+ *
+ * Defaults: reads test-results/results.json (written by every Playwright run,
+ * see playwright.config.ts), writes test-results/results.md and prints it.
+ *
+ * Relies only on test titles of the form "[gameId][RULE] description"
+ * (tests/support/tags.ts); anything else in the report is ignored.
+ */
+
+import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { dirname } from "node:path";
+
+const [reportPath = "test-results/results.json", outPath = "test-results/results.md"] = process.argv.slice(2);
+
+const GAME_ORDER = ["nova-arena", "tide-farm", "iron-siege", "drift-club", "platform", "store"];
+const GAME_NAMES = {
+  "nova-arena": "Nova Arena",
+  "tide-farm": "Tide Farm",
+  "iron-siege": "Iron Siege",
+  "drift-club": "Drift Club",
+  platform: "Platform",
+  store: "Store",
+};
+const GROUPS = [
+  { prefix: "C", heading: "Game contract (docs/game-integration-api.md, each game called directly)" },
+  { prefix: "I", heading: "Store ↔ game agreement (ordered through the platform, checked in the game)" },
+  { prefix: "U", heading: "UI smoke (storefront in a real browser)" },
+];
+const MARK = { passed: "✔", failed: "✘", timedOut: "✘", interrupted: "✘", skipped: "–" };
+const TITLE = /^\[([^\]]+)\]\[([A-Z]+\d+)\] (.*)$/;
+
+let report;
+try {
+  report = JSON.parse(readFileSync(reportPath, "utf8"));
+} catch (error) {
+  console.error(`Cannot read ${reportPath}. Run the tests first: npx playwright test`);
+  process.exit(1);
+}
+
+// --- Collect -----------------------------------------------------------------
+
+const results = [];
+const walk = (suite) => {
+  for (const spec of suite.specs ?? []) {
+    const match = TITLE.exec(spec.title);
+    if (!match) continue;
+    for (const run of spec.tests) {
+      const last = run.results.at(-1);
+      results.push({
+        game: match[1],
+        rule: match[2],
+        description: match[3],
+        status: last?.status ?? "skipped",
+        error: firstError(last?.errors ?? []),
+      });
+    }
+  }
+  (suite.suites ?? []).forEach(walk);
+};
+report.suites.forEach(walk);
+
+function clean(text) {
+  return text.replace(/\x1b\[[0-9;]*m/g, "").trim();
+}
+
+/** The custom message and what was received, from the first error of a test. */
+function firstError(errors) {
+  if (!errors.length) return "";
+  const lines = clean(errors[0].message ?? "").split("\n").map((line) => line.trim());
+  const message = (lines.find((line) => line.startsWith("Error:")) ?? lines[0] ?? "").replace(/^Error:\s*/, "");
+  // toEqual([]) failures carry what was found as "+ ..." diff lines, not a "Received:" line.
+  const found = lines
+    .filter((line) => line.startsWith("+") && !line.startsWith("+ Received"))
+    .map((line) => line.replace(/^\+\s*/, "").replace(/,$/, ""))
+    .filter((line) => line && line !== "Array [" && line !== "]")
+    .map(unquote);
+  const received =
+    lines.find((line) => line.startsWith("Received")) ?? (found.length ? `found: ${found.join(", ")}` : "");
+  const more = errors.length > 1 ? ` (+${errors.length - 1} more)` : "";
+  return ([message, received].filter(Boolean).join(" → ") + more).replace(/\s+/g, " ");
+}
+
+/** Diff lines show strings JSON-quoted; show the string itself. */
+function unquote(line) {
+  try {
+    const value = JSON.parse(line);
+    return typeof value === "string" ? value : line;
+  } catch {
+    return line;
+  }
+}
+
+const cell = (text) => String(text).replace(/\|/g, "\\|").replace(/\n/g, " ");
+const ruleNumber = (rule) => Number(rule.replace(/\D/g, ""));
+const truncate = (text, max = 220) => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
+
+// A run where nothing executed (usually preflight failed: the stack was not
+// running) must not render as a clean bill of health.
+if (!results.some((r) => r.status !== "skipped")) {
+  console.error(
+    `No checks ran in ${reportPath} (${results.length} skipped). The report only covers the last ` +
+      "Playwright run: either the stack was not running (start it with ./start.sh), or the last run " +
+      "only listed or skipped tests. Run npm run test:report to rebuild it."
+  );
+  process.exit(1);
+}
+
+// --- Render ------------------------------------------------------------------
+
+const out = [];
+const stats = report.stats ?? {};
+const counts = results.reduce((acc, r) => ((acc[MARK[r.status] ?? "?"] = (acc[MARK[r.status] ?? "?"] ?? 0) + 1), acc), {});
+
+out.push("# Test results");
+out.push("");
+out.push(
+  `Run ${stats.startTime ? new Date(stats.startTime).toISOString().replace("T", " ").slice(0, 16) + " UTC" : "(time unknown)"}` +
+    ` · ${results.length} checks · ✔ ${counts["✔"] ?? 0} · ✘ ${counts["✘"] ?? 0} · – ${counts["–"] ?? 0} skipped`
+);
+out.push("");
+out.push("✔ passed · ✘ failed · – skipped · blank: not run for that game. Generated by `npm run report` from `test-results/results.json`.");
+
+for (const group of GROUPS) {
+  const rows = results.filter((r) => r.rule.startsWith(group.prefix));
+  if (!rows.length) continue;
+
+  const games = GAME_ORDER.filter((game) => rows.some((r) => r.game === game));
+  const rules = [...new Set(rows.map((r) => r.rule))].sort((a, b) => ruleNumber(a) - ruleNumber(b));
+
+  out.push("", `## ${group.heading}`, "");
+  out.push(`| Rule | Check | ${games.map((g) => GAME_NAMES[g] ?? g).join(" | ")} |`);
+  out.push(`|---|---|${games.map(() => ":---:").join("|")}|`);
+  for (const rule of rules) {
+    const forRule = rows.filter((r) => r.rule === rule);
+    const marks = games.map((game) => {
+      const result = forRule.find((r) => r.game === game);
+      return result ? MARK[result.status] ?? "?" : "";
+    });
+    out.push(`| ${rule} | ${cell(forRule[0].description)} | ${marks.join(" | ")} |`);
+  }
+
+  if (group.prefix === "C") {
+    out.push("", "**Contract rules met per game**", "");
+    for (const game of games) {
+      const own = rows.filter((r) => r.game === game && r.status !== "skipped");
+      const passed = own.filter((r) => r.status === "passed").length;
+      const verdict = own.length && passed === own.length ? " (conforms)" : "";
+      out.push(`- ${GAME_NAMES[game] ?? game}: ${passed}/${own.length}${verdict}`);
+    }
+  }
+}
+
+const failures = results
+  .filter((r) => MARK[r.status] === "✘")
+  .sort(
+    (a, b) =>
+      GAME_ORDER.indexOf(a.game) - GAME_ORDER.indexOf(b.game) ||
+      a.rule.replace(/\d+/, "").localeCompare(b.rule.replace(/\d+/, "")) ||
+      ruleNumber(a.rule) - ruleNumber(b.rule)
+  );
+
+if (failures.length) {
+  out.push("", "## Why each check failed", "");
+  out.push("| Game | Rule | Failure |");
+  out.push("|---|---|---|");
+  for (const f of failures) {
+    out.push(`| ${GAME_NAMES[f.game] ?? f.game} | ${f.rule} | ${cell(truncate(f.error || f.status))} |`);
+  }
+}
+
+const skipped = results.filter((r) => r.status === "skipped");
+if (skipped.length) {
+  out.push("", "## Skipped", "");
+  for (const s of skipped) {
+    out.push(`- ${GAME_NAMES[s.game] ?? s.game} ${s.rule}: ${s.description}`);
+  }
+}
+
+const markdown = out.join("\n") + "\n";
+mkdirSync(dirname(outPath), { recursive: true });
+writeFileSync(outPath, markdown);
+process.stdout.write(markdown);
+console.error(`\nWritten to ${outPath}`);

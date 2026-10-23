@@ -96,7 +96,22 @@ platform/     Java. The service every storefront request goes through.
 games/        Java. The four game backends. Independently written, by design.
 docs/         The integration contract, the platform API, and the
               handover notes. Start here.
+docs/findings/        What this submission found: test results, ticket triage,
+                      candidate fixes. Summarised in NOTES.md.
+claude/       Architecture reference written as context for AI agents.
+storefront/tests/     The Playwright suites (api/, e2e/) and their helpers (support/).
+storefront/scripts/   test-report.mjs runs every suite and builds the results
+                      table; results-table.mjs builds the table from the last run.
 ```
+
+## Findings
+
+Start with [`NOTES.md`](NOTES.md), the one-page summary. The rest backs it up:
+
+- [`docs/findings/test-results.md`](docs/findings/test-results.md): game × rule ✔/✘ table from one full run, with the reason for every failure
+- [`docs/findings/support-tickets-triage.md`](docs/findings/support-tickets-triage.md): the tickets grouped by failure type, with reproductions
+- [`docs/findings/fixes-list.md`](docs/findings/fixes-list.md): candidate fixes in the code we own (none applied)
+- [`claude/architecture.md`](claude/architecture.md): how the system works, and where each game departs from the contract
 
 ## Tests
 
@@ -108,10 +123,59 @@ suggestion about where tests belong.
 ./gradlew test                          # Java, JUnit 5 (platform + games)
 cd storefront && npm test               # TypeScript, vitest
 cd storefront && npx playwright install chromium   # once
-cd storefront && npm run test:e2e       # browser, Playwright
+cd storefront && npm run test:e2e       # all Playwright suites below (API + browser)
 ```
 
 Use these, replace them, or ignore them and bring your own tooling.
+
+### Quality suites: contract, agreement and UI
+
+Three Playwright suites in `storefront/tests/`, run against the live stack:
+
+| Suite | What it checks | Where |
+|---|---|---|
+| Game contract (`api` project, `@contract`) | Each of the 14 rules in `docs/game-integration-api.md`, run against every game directly (C1–C14) | `tests/api/game-contract.spec.ts` |
+| Store ↔ game agreement (`api` project, `@invariant`) | Orders, refunds and prices placed through the platform, then checked against what each game actually holds (I1–I10) | `tests/api/store-game-agreement.spec.ts` |
+| UI smoke (`ui` project) | Buying, a declined card, double-clicking Pay, and refunds from the support console, in a real browser (U1–U7) | `tests/e2e/` |
+
+Red tests are expected: each failing test records a real defect and fixes
+nothing. A preflight check fails fast if the stack is not running.
+
+```bash
+./start.sh                              # in one terminal; restart it for a clean slate
+cd storefront
+npx playwright install chromium         # once
+npm run test:report                     # all three suites, then the results table (~6 min)
+npm run test:contract                   # just the game contract suite
+npm run test:invariant                  # just the store ↔ game agreement suite
+npm run test:ui                         # just the browser suite
+npm run report                          # rebuild the table from the last run
+```
+
+`npm run report` writes a game × rule ✔/✘ table, with the reason for each
+failure, to `storefront/test-results/results.md`. It covers **only the last
+Playwright run**, so after running one suite on its own the table shows just
+that suite; use `npm run test:report` for the full picture. The HTML report with
+traces is in `storefront/playwright-report/` (`npx playwright show-report`). A
+snapshot of one full run is in [`docs/findings/test-results.md`](docs/findings/test-results.md).
+
+Notes:
+
+- All state is in memory and shared with the tests. Tests measure before/after
+  differences, so repeated runs give the same verdicts (apart from Iron Siege's
+  random behaviour, below). Restart the stack if
+  you want empty inventories (C6 uses up Tide Farm's two Golden Tractors).
+- Iron Siege randomly sheds load. Contract tests repeat a call that answers
+  503, except C14, which measures slowness on purpose. C14 fails on most runs,
+  not all. The agreement suite runs Iron Siege over a batch of 60 orders and
+  asserts rules that must hold for every order. I3 and I9 fail reliably; I2
+  needs a rare combination and is caught on some runs only.
+- The agreement suite takes 3–4 minutes, mostly Iron Siege's batch.
+- U7 needs preview mode and is skipped otherwise. To run it without restarting
+  the main stack, start a second storefront in another terminal, from
+  `storefront/`: `PORT=3100 PREVIEW_GAMES=true npm start`. Then, also from
+  `storefront/`: `STOREFRONT_URL=http://localhost:3100 npm run test:ui -- --grep @preview`.
+  Stop the second storefront with Ctrl-C in its terminal.
 
 ## Players
 
