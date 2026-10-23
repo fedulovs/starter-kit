@@ -1,6 +1,6 @@
 # Support Tickets: Triage and Action Plan
 
-Companion to [architecture.md](architecture.md). It takes the eight tickets in
+Companion to [architecture.md](../../claude/architecture.md). It takes the eight tickets in
 `docs/support-tickets.md`, groups them by **failure type** (with game as a tag),
 links each one to a root cause in the code, and lists what to do about it.
 

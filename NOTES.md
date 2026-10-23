@@ -11,7 +11,7 @@ reproduced.
 
 The first thing I did was build an understanding of how the system works, and
 document it so that AI agents can use it later.
-Output: [architecture reference](architecture.md).
+Output: [architecture reference](claude/architecture.md).
 
 ### 2. Analyse the support tickets
 
@@ -19,7 +19,7 @@ Next I analysed the support tickets. They list the errors players already face,
 which shows where the system is flawed today. I categorised the tickets by
 failure type, game, severity and where the fix lives, then reproduced them
 against the running stack using Claude.
-Output: [triage document](support-tickets-triage.md).
+Output: [triage document](docs/findings/support-tickets-triage.md).
 
 ### 3. Prioritise
 
@@ -43,7 +43,7 @@ Playwright suites and a results table (one runner, one report):
   tests point at the system, not the tests.
 - **A results table** (`npm run report`): game × rule ✔/✘, with the game's
   actual response as the reason for each failure. Snapshot:
-  [test-results.md](test-results.md).
+  [test-results.md](docs/findings/test-results.md).
 
 ### 5. Implementation
 
@@ -60,9 +60,9 @@ be backed by human code review.
   idempotency, and it finishes requests after the platform has given up at 2 s.
   The platform also sends a new grant ID on each retry. In one run, 60 orders
   produced 58 grants for 47 delivered orders. This explains PS-291, PS-341 and
-  PS-358. PS-358 should not be closed: the agreement suite caught an order
-  reported `failed` while two items arrived (I2), and more items than delivered
-  orders (I3).
+  PS-358. PS-358 should not be closed: the agreement suite catches more items
+  than delivered orders reliably (I3) and, on some runs, an order reported
+  `failed` while items arrived (I2).
 - **Refunds don't take the item back on Iron Siege (no revoke route) or Drift
   Club (revoke does nothing).** The platform ignores the revoke response and
   marks the order `refunded` anyway. It also refunds orders that were never
@@ -82,7 +82,7 @@ be backed by human code review.
 
 - **No fixes.** A failing test that names the defect is a finished piece of
   work, and fixing first would have hidden what the system does today.
-  Candidate fixes in our code are listed in [fixes-list.md](fixes-list.md). Several are
+  Candidate fixes in our code are listed in [fixes-list.md](docs/findings/fixes-list.md). Several are
   one-liners.
 - **No load or concurrency testing** beyond sampling Iron Siege's latency.
 

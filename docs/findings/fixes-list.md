@@ -2,7 +2,7 @@
 
 Candidate fixes in `storefront/` and `platform/`, the code we own. Games in
 `games/` are out of scope; their defects go to game-team write-ups instead.
-Context: [architecture.md](architecture.md), [support-tickets-triage.md](support-tickets-triage.md).
+Context: [architecture.md](../../claude/architecture.md), [support-tickets-triage.md](support-tickets-triage.md).
 
 Test IDs refer to the planned suites: C = game contract, I = store ↔ game agreement, U = UI smoke.
 

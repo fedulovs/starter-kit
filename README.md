@@ -96,20 +96,21 @@ platform/     Java. The service every storefront request goes through.
 games/        Java. The four game backends. Independently written, by design.
 docs/         The integration contract, the platform API, and the
               handover notes. Start here.
-claude/       What this submission found: notes, ticket triage, architecture
-              reference, candidate fixes, and a snapshot of the test results.
+docs/findings/        What this submission found: test results, ticket triage,
+                      candidate fixes. Summarised in NOTES.md.
+claude/       Architecture reference written as context for AI agents.
 storefront/tests/     The Playwright suites (api/, e2e/) and their helpers (support/).
-storefront/scripts/   results-table.mjs, which turns a test run into the results table.
+storefront/scripts/   test-report.mjs runs every suite and builds the results
+                      table; results-table.mjs builds the table from the last run.
 ```
 
 ## Findings
 
-Start with [`claude/notes.md`](claude/notes.md), the one-page summary. The rest
-backs it up:
+Start with [`NOTES.md`](NOTES.md), the one-page summary. The rest backs it up:
 
-- [`claude/test-results.md`](claude/test-results.md): game × rule ✔/✘ table from one full run, with the reason for every failure
-- [`claude/support-tickets-triage.md`](claude/support-tickets-triage.md): the tickets grouped by failure type, with reproductions
-- [`claude/fixes-list.md`](claude/fixes-list.md): candidate fixes in the code we own (none applied)
+- [`docs/findings/test-results.md`](docs/findings/test-results.md): game × rule ✔/✘ table from one full run, with the reason for every failure
+- [`docs/findings/support-tickets-triage.md`](docs/findings/support-tickets-triage.md): the tickets grouped by failure type, with reproductions
+- [`docs/findings/fixes-list.md`](docs/findings/fixes-list.md): candidate fixes in the code we own (none applied)
 - [`claude/architecture.md`](claude/architecture.md): how the system works, and where each game departs from the contract
 
 ## Tests
@@ -156,7 +157,7 @@ failure, to `storefront/test-results/results.md`. It covers **only the last
 Playwright run**, so after running one suite on its own the table shows just
 that suite; use `npm run test:report` for the full picture. The HTML report with
 traces is in `storefront/playwright-report/` (`npx playwright show-report`). A
-snapshot of one full run is in [`claude/test-results.md`](claude/test-results.md).
+snapshot of one full run is in [`docs/findings/test-results.md`](docs/findings/test-results.md).
 
 Notes:
 
